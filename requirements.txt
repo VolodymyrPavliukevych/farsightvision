@@ -1,0 +1,9 @@
+streamlit
+numpy
+watchdog
+matplotlib
+torchvision
+
+# kmeans_pytorch
+# transformers
+# torch
