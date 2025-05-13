@@ -112,11 +112,7 @@ class ImageProcessor:
 
 		# Process the images
 		for _, _, files in os.walk(self.dataset_path):
-			index = 0
 			for file_path in tqdm(files, desc="Processing images", unit="file"):
-				index += 1
-				if index > 100:
-					break
 				file_type = os.path.splitext(file_path)[1]
 				if file_type not in self.images_for_process:
 					continue
@@ -228,6 +224,7 @@ class ImageProcessor:
 
 
 def main():
+
 	dataset_url = "https://orients-ai-artefacts.s3.eu-north-1.amazonaws.com/selection-tasks/landc02/dataset.zip"
 	image_processor = ImageProcessor(dataset_url=dataset_url)
 	# Load the dataset
