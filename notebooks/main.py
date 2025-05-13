@@ -16,6 +16,9 @@ from math import comb
 import shutil
 
 class ImageProcessor:
+	"""
+	A class to process images from a dataset, including downloading, unzipping, and feature extraction using SIFT.
+	"""
 	def __init__(self, dataset_folder_name:str='dataset', dataset_url:str=None, images_for_process: list = ['.tif']):
 		self.dataset_folder_name = dataset_folder_name
 		self.improved_dataset_folder_name = "improved_dataset"
@@ -32,6 +35,9 @@ class ImageProcessor:
 		return os.path.join(os.path.dirname(__file__), self.improved_dataset_folder_name)
 	
 	def read_and_prepare_image(self, img_name: str) -> tuple:
+		"""
+		Read and prepare an image for processing.
+		"""
 		img_path = os.path.join(self.dataset_path, img_name)
 		img = cv2.imread(img_path) #, cv2.IMREAD_UNCHANGED
 
@@ -70,6 +76,9 @@ class ImageProcessor:
 		return (img, gray_img, edge_enhanced_img)
 	
 	def load_dataset(self) -> str:
+		"""
+		Load the dataset from the specified URL if it doesn't exist locally.
+		"""
 		if os.path.exists(self.dataset_path):
 			return self.dataset_path
 		# Download the dataset if it doesn't exist
@@ -81,10 +90,13 @@ class ImageProcessor:
 		return self.dataset_path
 
 	def download_dataset(self):
+		"""
+		Download the dataset from the specified URL.
+		"""
 		response = requests.get(self.dataset_url, stream=True)
 		total_size = int(response.headers.get('content-length', 0))
 		block_size = 1024
-		with open(os.path.join(self.dataset_path, 'dataset.zip'), 'wb') as file:
+		with open(os.path.join(os.path.dirname(__file__), 'dataset.zip'), 'wb') as file:
 			for data in tqdm(response.iter_content(block_size), total=total_size, unit='KB', unit_scale=True):
 				file.write(data)
 	
@@ -93,20 +105,23 @@ class ImageProcessor:
 			zip_ref.extractall(self.dataset_path)
 
 	def process_images(self):
-		sift = cv2.SIFT_create()
+		"""
+		Process images in the dataset to extract SIFT features.
+		"""
+		sift = cv2.SIFT_create(contrastThreshold=0.01)
 
 		# Process the images
 		for _, _, files in os.walk(self.dataset_path):
 			index = 0
 			for file_path in tqdm(files, desc="Processing images", unit="file"):
 				index += 1
-				if index > 25:
+				if index > 100:
 					break
 				file_type = os.path.splitext(file_path)[1]
 				if file_type not in self.images_for_process:
 					continue
 
-				img, _, _ = self.read_and_prepare_image(file_path)
+				_, img, _ = self.read_and_prepare_image(file_path)
 				if img is None:
 					print(f"Failed to load image at path: {file_path}")
 					continue
@@ -117,22 +132,23 @@ class ImageProcessor:
 					continue
 
 				self.images_descriptions.append({
-					'image': img,
+					# 'image': img,
 					'path': os.path.join(self.dataset_path, file_path),
 					'image_name': file_path,
 					'keypoints': keypoints,
 					'descriptors': descriptors
 				})
 
-	def compare_sift_features(self, ratio_thresh=0.75, match_thresh=50):
+	def compare_sift_features(self, ratio_thresh=0.75, match_thresh=100):
+		"""
+		Compare SIFT features of images in the dataset and find similar pairs.
+		"""
 		bf = cv2.BFMatcher()
 		similar_pairs = []
 		zones = []
 
 		total_pairs = comb(len(self.images_descriptions), 2)
 		for img1, img2 in tqdm(combinations(self.images_descriptions, 2), desc="Comparing images", unit="pair", total=total_pairs):
-			if img1['image_name'] == "2aec9ce0-2162-4099-abc2-f59092a565b7.tif":
-				print(f"Image 1: {img1['image_name']} keys: {len(img1['keypoints'])} descriptors: {len(img1['descriptors'])}")
 			# Compare the descriptors of the two images
 			des1 = img1['descriptors']
 			des2 = img2['descriptors']
@@ -144,7 +160,7 @@ class ImageProcessor:
 
 			# Lowe's ratio test
 			good_matches = [m for m, n in matches if m.distance < ratio_thresh * n.distance]
-			if True:
+			if False:
 				matched_kps = [kps2[m.trainIdx] for m in good_matches]
 				
 				image_1 = cv2.drawKeypoints(img1['image'], matched_kps, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
@@ -173,7 +189,8 @@ class ImageProcessor:
 					zones.append(zone)
 				
 				similar_pairs.append((img1['image_name'], img2['image_name'], len(good_matches)))
-
+		
+		# Save non paired images
 		for image in tqdm(self.images_descriptions):
 			image_name = image['image_name']
 			found_corelated_zone = False
@@ -186,6 +203,15 @@ class ImageProcessor:
 				zone = set()
 				zone.add(image_name)
 				zones.append(zone)
+
+		# merge similar zones
+		for i in range(len(zones)):
+			for j in range(i + 1, len(zones)):
+				if zones[i].intersection(zones[j]):
+					print(f"Zones {i} and {j} are similar: {zones[i]} and {zones[j]}")
+					zones[i] = zones[i].union(zones[j])
+					zones.pop(j)
+					break
 
 		
 		if os.path.exists(self.improved_dataset_path) == False:
@@ -211,7 +237,6 @@ def main():
 	print("Similar pairs of images:")
 	for img1, img2, num_matches in similar_pairs:
 		print(f"Image 1: {img1}, Image 2: {img2}, Matches: {num_matches}")
-
 
 if __name__ == '__main__':
 	main()
