@@ -31,14 +31,32 @@ class ImageProcessor:
 	def improved_dataset_path(self):
 		return os.path.join(os.path.dirname(__file__), self.improved_dataset_folder_name)
 	
-	def read_and_prepare_image(img_path: str) -> tuple:
-    
+	def read_and_prepare_image(self, img_name: str) -> tuple:
+		img_path = os.path.join(self.dataset_path, img_name)
 		img = cv2.imread(img_path) #, cv2.IMREAD_UNCHANGED
+
+		# Get the original dimensions
+		original_height, original_width = img.shape[:2]
+				
+		scale_factor = 0.50
+		ratio = None
+		shape = None
+		# Calculate the scaling factor while maintaining the aspect ratio
+		if shape is not None:
+			scale_factor = min(img.shape[0] / original_width, img.shape[1] / original_height)
+		if isinstance(ratio, float) or isinstance(ratio, int):
+			scale_factor = ratio
+		# Calculate new dimensions
+		new_width = int(original_width * scale_factor)
+		new_height = int(original_height * scale_factor)
+		img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+
 		# Experiment with grayscale
 		gray_img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
 		# gray_img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 		# gray_img = cv2.GaussianBlur(gray_img, (5, 5), 0)
-		
+		gray_img = cv2.resize(gray_img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+				
 
 		# Enhance contrast using CLAHE
 		clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -47,12 +65,8 @@ class ImageProcessor:
 		# Apply Laplacian filter to enhance edges
 		laplacian = cv2.Laplacian(enhanced_img, cv2.CV_64F)
 		edge_enhanced_img = cv2.convertScaleAbs(laplacian)
-		
-		# scale_factor = 1.0
-		# img = cv2.resize(img, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
-		# gray_img = cv2.resize(gray_img, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
-		# edge_enhanced_img = cv2.resize(edge_enhanced_img, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
-
+		edge_enhanced_img = cv2.resize(edge_enhanced_img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+	
 		return (img, gray_img, edge_enhanced_img)
 	
 	def load_dataset(self) -> str:
@@ -92,23 +106,7 @@ class ImageProcessor:
 				if file_type not in self.images_for_process:
 					continue
 
-
-				img = cv2.imread(os.path.join(self.dataset_path, file_path), cv2.IMREAD_GRAYSCALE)
-				# Get the original dimensions
-				original_height, original_width = img.shape[:2]
-				
-				scale_factor = 0.50
-				ratio = None
-				shape = None
-				# Calculate the scaling factor while maintaining the aspect ratio
-				if shape is not None:
-					scale_factor = min(img.shape[0] / original_width, img.shape[1] / original_height)
-				if isinstance(ratio, float) or isinstance(ratio, int):
-					scale_factor = ratio
-				# Calculate new dimensions
-				new_width = int(original_width * scale_factor)
-				new_height = int(original_height * scale_factor)
-				img = cv2.resize(img, (new_width, new_height), interpolation=cv2.INTER_AREA)
+				img, _, _ = self.read_and_prepare_image(file_path)
 				if img is None:
 					print(f"Failed to load image at path: {file_path}")
 					continue
@@ -133,6 +131,8 @@ class ImageProcessor:
 
 		total_pairs = comb(len(self.images_descriptions), 2)
 		for img1, img2 in tqdm(combinations(self.images_descriptions, 2), desc="Comparing images", unit="pair", total=total_pairs):
+			if img1['image_name'] == "2aec9ce0-2162-4099-abc2-f59092a565b7.tif":
+				print(f"Image 1: {img1['image_name']} keys: {len(img1['keypoints'])} descriptors: {len(img1['descriptors'])}")
 			# Compare the descriptors of the two images
 			des1 = img1['descriptors']
 			des2 = img2['descriptors']
@@ -144,7 +144,7 @@ class ImageProcessor:
 
 			# Lowe's ratio test
 			good_matches = [m for m, n in matches if m.distance < ratio_thresh * n.distance]
-			if False:
+			if True:
 				matched_kps = [kps2[m.trainIdx] for m in good_matches]
 				
 				image_1 = cv2.drawKeypoints(img1['image'], matched_kps, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
